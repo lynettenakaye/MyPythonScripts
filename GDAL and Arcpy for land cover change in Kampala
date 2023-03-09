@@ -1,0 +1,89 @@
+import gdal
+import arcpy
+from arcpy.sa import *
+
+#DECLARING VARIABLES
+old_NIR = r"J:\kampala imagery\LT04_L1TP_171060_19890227_20200916_02_T1\LT04_L1TP_171060_19890227_20200916_02_T1_B4.TIF"
+old_RED = r"J:\kampala imagery\LT04_L1TP_171060_19890227_20200916_02_T1\LT04_L1TP_171060_19890227_20200916_02_T1_B3.TIF"
+old_GREEN = r"J:\kampala imagery\LT04_L1TP_171060_19890227_20200916_02_T1\LT04_L1TP_171060_19890227_20200916_02_T1_B2.TIF"
+old_BLUE = r"J:\kampala imagery\LT04_L1TP_171060_19890227_20200916_02_T1\LT04_L1TP_171060_19890227_20200916_02_T1_B1.TIF"
+new_NIR = r"J:\kampala imagery\LC08_L1TP_171060_20150315_20200909_02_T1\LC08_L1TP_171060_20150315_20200909_02_T1_B5.TIF"
+new_RED = r"J:\kampala imagery\LC08_L1TP_171060_20150315_20200909_02_T1\LC08_L1TP_171060_20150315_20200909_02_T1_B4.TIF"
+new_GREEN = r"J:\kampala imagery\LC08_L1TP_171060_20150315_20200909_02_T1\LC08_L1TP_171060_20150315_20200909_02_T1_B3.TIF"
+new_BLUE = r"J:\kampala imagery\LC08_L1TP_171060_20150315_20200909_02_T1\LC08_L1TP_171060_20150315_20200909_02_T1_B2.TIF"
+newndvifile =r"J:\kampala imagery\2015newNDVII.TIF"
+oldndvifile =r"J:\kampala imagery\1989oldNDVII.TIF"
+
+
+#Calculating NDVI float raster
+new_ndvi = Divide(Float(Raster(new_NIR) - Raster(new_RED)), Float(Raster(new_NIR) + Raster(new_RED)))
+old_ndvi = Divide(Float(Raster(old_NIR) - Raster(old_RED)), Float(Raster(old_NIR) + Raster(old_RED)))
+
+
+#Saving rasters:
+new_ndvi.save(newndvifile)
+print('NEWndvi_Successful_!')
+old_ndvi.save(oldndvifile)
+print('OLDndvi_Successful_!')
+
+
+#CLIPPING THE NDVI IMAGES CREATED USING THE STUDY AREA SHAPEFILE
+# Build the OGR SQL
+sql = "SELECT * FROM Buikwe_shapefile"
+
+oldndviclip =r"J:\kampala imagery\1989NDVICLIP.TIF"
+newndviclip =r"J:\kampala imagery\2015NDVICLIP.TIF"
+clipshapefile =r"J:\kampala imagery\Buikwe_shapefile.shp"
+
+
+# Clip old ndvi file
+result1 = gdal.Warp(oldndviclip,
+                   oldndvifile,
+                   cutlineDSName= clipshapefile ,
+                   cropToCutline=True)
+print "Clip 1 successful"
+# Clip new ndvi file
+result2 = gdal.Warp(newndviclip,
+                   newndvifile,
+                   cutlineDSName= clipshapefile ,
+                   cropToCutline=True)
+print "Clip 2 successful"
+
+#IMAGE DIFFERENCING
+#comparing images
+differencing = Float(Raster(oldndviclip))- Float(Raster(newndviclip))
+newvalue = Float(differencing)
+
+#Saving raster:
+newvalue.save(r"J:\kampala imagery\CHANGE.TIF")
+print('Differecing Tiff created Successfully!')
+
+#CREATING JPEG FILE FORMAT FOR NDVI CHANGE
+gdal.Translate(destName=r"J:\kampala imagery\CHANGE.jpeg", srcDS=r"J:\kampala imagery\CHANGE.TIF")
+print "JPEG successfully created"
+print "DONE"
+
+#CREATING TRUE COLOUR IMAGE TIFFS
+#for old image
+ImageList = [old_RED, old_GREEN, old_BLUE]  #list images to be stacked from red to blue
+VRT = r"J:\kampala imagery\oldvrt.vrt" #creating a virtual dataset which is a combination of the input raster datasets
+gdal.BuildVRT(VRT, ImageList, separate=True, callback=gdal.TermProgress_nocb)
+#perform format trnaslation using gdal translate from vrt to tiff file format
+InputImage = gdal.Open(VRT, 0)  # open the VRT in read-only mode
+gdal.Translate(r"J:\kampala imagery\oldtruecolour.tiff", InputImage, format='GTiff',
+               creationOptions=['COMPRESS:DEFLATE', 'TILED:YES'],
+               callback=gdal.TermProgress_nocb)
+del InputImage  # close the VRT
+#for new image
+ImageList = [new_RED, new_GREEN, new_BLUE]  #list images to be stacked from red to blue
+VRT = r"J:\kampala imagery\newvrt.vrt" #creating a virtual dataset which is a combination of the input raster datasets
+gdal.BuildVRT(VRT, ImageList, separate=True, callback=gdal.TermProgress_nocb)
+#perform format trnaslation using gdal translate from vrt to tiff file format
+InputImage = gdal.Open(VRT, 0)  # open the VRT in read-only mode
+gdal.Translate(r"J:\kampala imagery\newtruecolour.tiff", InputImage, format='GTiff',
+               creationOptions=['COMPRESS:DEFLATE', 'TILED:YES'],
+               callback=gdal.TermProgress_nocb)
+del InputImage  # close the VRT
+
+
+
